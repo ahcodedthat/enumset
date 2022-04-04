@@ -254,37 +254,37 @@ fn enum_set_type_impl(info: EnumSetInfo) -> SynTokenStream {
         quote! {}
     } else {
         quote! {
-            impl <O : Into<#typed_enumset>> #core::ops::Sub<O> for #name {
+            impl <O : Into<#typed_enumset>> #core::ops::Sub<O> for #name where Self: Copy {
                 type Output = #typed_enumset;
                 fn sub(self, other: O) -> Self::Output {
                     #enumset::EnumSet::only(self) - other.into()
                 }
             }
-            impl <O : Into<#typed_enumset>> #core::ops::BitAnd<O> for #name {
+            impl <O : Into<#typed_enumset>> #core::ops::BitAnd<O> for #name where Self: Copy {
                 type Output = #typed_enumset;
                 fn bitand(self, other: O) -> Self::Output {
                     #enumset::EnumSet::only(self) & other.into()
                 }
             }
-            impl <O : Into<#typed_enumset>> #core::ops::BitOr<O> for #name {
+            impl <O : Into<#typed_enumset>> #core::ops::BitOr<O> for #name where Self: Copy {
                 type Output = #typed_enumset;
                 fn bitor(self, other: O) -> Self::Output {
                     #enumset::EnumSet::only(self) | other.into()
                 }
             }
-            impl <O : Into<#typed_enumset>> #core::ops::BitXor<O> for #name {
+            impl <O : Into<#typed_enumset>> #core::ops::BitXor<O> for #name where Self: Copy {
                 type Output = #typed_enumset;
                 fn bitxor(self, other: O) -> Self::Output {
                     #enumset::EnumSet::only(self) ^ other.into()
                 }
             }
-            impl #core::ops::Not for #name {
+            impl #core::ops::Not for #name where Self: Copy {
                 type Output = #typed_enumset;
                 fn not(self) -> Self::Output {
                     !#enumset::EnumSet::only(self)
                 }
             }
-            impl #core::cmp::PartialEq<#typed_enumset> for #name {
+            impl #core::cmp::PartialEq<#typed_enumset> for #name where Self: Copy {
                 fn eq(&self, other: &#typed_enumset) -> bool {
                     #enumset::EnumSet::only(*self) == *other
                 }
@@ -375,7 +375,7 @@ fn enum_set_type_impl(info: EnumSetInfo) -> SynTokenStream {
     let is_zst = info.variants.len() == 1;
     let into_impl = if is_uninhabited {
         quote! {
-            fn enum_into_u32(self) -> u32 {
+            fn enum_into_u32(&self) -> u32 {
                 panic!(concat!(stringify!(#name), " is uninhabited."))
             }
             unsafe fn enum_from_u32(val: u32) -> Self {
@@ -385,8 +385,8 @@ fn enum_set_type_impl(info: EnumSetInfo) -> SynTokenStream {
     } else if is_zst {
         let variant = &info.variants[0].name;
         quote! {
-            fn enum_into_u32(self) -> u32 {
-                self as u32
+            fn enum_into_u32(&self) -> u32 {
+                *self as u32
             }
             unsafe fn enum_from_u32(val: u32) -> Self {
                 #name::#variant
@@ -402,8 +402,8 @@ fn enum_set_type_impl(info: EnumSetInfo) -> SynTokenStream {
             .iter().map(|x| Ident::new(x, Span::call_site())).collect();
 
         quote! {
-            fn enum_into_u32(self) -> u32 {
-                self as u32
+            fn enum_into_u32(&self) -> u32 {
+                *self as u32
             }
             unsafe fn enum_from_u32(val: u32) -> Self {
                 // We put these in const fields so the branches they guard aren't generated even

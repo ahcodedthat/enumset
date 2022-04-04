@@ -103,7 +103,7 @@ pub mod __internal {
         const ALL_BITS: Self::Repr;
 
         /// Converts an enum of this type into its bit position.
-        fn enum_into_u32(self) -> u32;
+        fn enum_into_u32(&self) -> u32;
         /// Converts a bit position into an enum value.
         unsafe fn enum_from_u32(val: u32) -> Self;
 
@@ -189,7 +189,7 @@ use crate::repr::EnumSetTypeRepr;
 ///    A, B, C, D, E, F, G,
 /// }
 /// ```
-pub unsafe trait EnumSetType: Copy + Eq + EnumSetTypePrivate { }
+pub unsafe trait EnumSetType: Sized + EnumSetTypePrivate { }
 
 /// An efficient set type for enums.
 ///
@@ -217,7 +217,6 @@ pub unsafe trait EnumSetType: Copy + Eq + EnumSetTypePrivate { }
 /// In addition, the `#[enumset(serialize_as_list)]` attribute causes the `EnumSet` to be
 /// instead serialized as a list of enum variants. This requires your enum type implement
 /// [`Serialize`] and [`Deserialize`]. Note that this is a breaking change
-#[derive(Copy, Clone, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct EnumSet<T: EnumSetType> {
     #[doc(hidden)]
@@ -354,15 +353,23 @@ impl <T: EnumSetType> EnumSet<T> {
     /// If the set did have this value present, `false` is returned.
     #[inline(always)]
     pub fn insert(&mut self, value: T) -> bool {
-        let contains = !self.contains(value);
-        self.__priv_repr.add_bit(value.enum_into_u32());
+        self.insert_by_ref(&value)
+    }
+
+    #[inline(always)]
+    fn insert_by_ref(&mut self, value: &T) -> bool {
+        let value_into_u32 = value.enum_into_u32();
+        let contains = !self.__priv_repr.has_bit(value_into_u32);
+        self.__priv_repr.add_bit(value_into_u32);
         contains
     }
+
     /// Removes a value from this set. Returns whether the value was present in the set.
     #[inline(always)]
     pub fn remove(&mut self, value: T) -> bool {
-        let contains = self.contains(value);
-        self.__priv_repr.remove_bit(value.enum_into_u32());
+        let value_into_u32 = value.enum_into_u32();
+        let contains = self.__priv_repr.has_bit(value_into_u32);
+        self.__priv_repr.remove_bit(value_into_u32);
         contains
     }
 
@@ -514,7 +521,11 @@ impl <T: EnumSetType> Sum<T> for EnumSet<T> {
 }
 impl <'a, T: EnumSetType> Sum<&'a T> for EnumSet<T> {
     fn sum<I: Iterator<Item=&'a T>>(iter: I) -> Self {
-        iter.fold(EnumSet::empty(), |a, v| a | *v)
+        let mut set = EnumSet::empty();
+        iter.for_each(|v| {
+            set.insert_by_ref(v);
+        });
+        set
     }
 }
 
@@ -586,9 +597,27 @@ impl <T: EnumSetType> From<T> for EnumSet<T> {
     }
 }
 
+impl <T: EnumSetType> Clone for EnumSet<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl <T: EnumSetType> Copy for EnumSet<T> {}
+
+impl <T: EnumSetType> PartialEq for EnumSet<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.__priv_repr == other.__priv_repr
+    }
+}
+
+impl <T: EnumSetType> Eq for EnumSet<T> {}
+
 impl <T: EnumSetType> PartialEq<T> for EnumSet<T> {
     fn eq(&self, other: &T) -> bool {
-        self.__priv_repr == EnumSet::only(*other).__priv_repr
+        let mut other_set = EnumSet::empty();
+        other_set.insert_by_ref(other);
+        self.__priv_repr == other_set.__priv_repr
     }
 }
 impl <T: EnumSetType + Debug> Debug for EnumSet<T> {
